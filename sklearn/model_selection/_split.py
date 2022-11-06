@@ -1007,6 +1007,10 @@ class TimeSeriesSplit(_BaseKFold):
     max_train_size : int, default=None
         Maximum size for a single training set.
 
+    min_train_size : int, default:None
+        Minimum size for a single training set.
+        If `None` this value will be set to test_size.
+
     test_size : int, default=None
         Used to limit the size of the test set. Defaults to
         ``n_samples // (n_splits + 1)``, which is the maximum allowed value
@@ -1111,16 +1115,34 @@ class TimeSeriesSplit(_BaseKFold):
       `n_splits='walk_forward'`.
     """
 
-    def __init__(self, n_splits=5, *, max_train_size=None, test_size=None, gap=0):
+    def __init__(
+        self,
+        n_splits=5,
+        *,
+        max_train_size=None,
+        min_train_size=None,
+        test_size=None,
+        gap=0,
+    ):
         super().__init__(n_splits, shuffle=False, random_state=None)
         if self.n_splits == "walk_forward" and (
             max_train_size is None or test_size is None
         ):
             raise ValueError(
-                "If `n_splits='walk_forward', then `max_train_size` and `test_size` "
+                "If `n_splits='walk_forward'`, then `max_train_size` and `test_size` "
                 "must be specified."
             )
+        if (
+            self.n_splits == "walk_forward"
+            and (max_train_size is not None and min_train_size is not None)
+            and (max_train_size < min_train_size)
+        ):
+            raise ValueError(
+                "If `n_splits='walk_forward'` and `min_train_size` is specified, then "
+                "`min_train_size <= max_train_size` must hold."
+            )
         self.max_train_size = max_train_size
+        self.min_train_size = min_train_size
         self.test_size = test_size
         self.gap = gap
 
@@ -1204,7 +1226,9 @@ class TimeSeriesSplit(_BaseKFold):
             Returns the number of splitting iterations in the cross-validator.
         """
         if self.n_splits == "walk_forward":
-            return (_num_samples(X) - self.max_train_size - self.gap) // self.test_size
+            if self.min_train_size is None:
+                self.min_train_size = self.test_size
+            return (_num_samples(X) - self.min_train_size - self.gap) // self.test_size
         return self.n_splits
 
 
